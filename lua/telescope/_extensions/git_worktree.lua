@@ -109,8 +109,54 @@ local create_input_prompt = function(cb)
     cb(subtree)
 end
 
+local pconf = {
+    mappings = {
+        ["i"] = {
+            ["<C-d>"] = delete_worktree,
+            ["<C-f>"] = toggle_forced_deletion,
+        },
+        ["n"] = {
+            ["<C-d>"] = delete_worktree,
+            ["<C-f>"] = toggle_forced_deletion,
+        },
+    },
+}
+
+local get_default_opts = function(opts)
+	opts = opts or {}
+	local defaults = (function()
+		if pconf.theme then
+			return require("telescope.themes")["get_" .. pconf.theme](pconf)
+		end
+		return vim.deepcopy(pconf)
+	end)()
+
+	if pconf.mappings then
+		defaults.attach_mappings = function(prompt_bufnr, map)
+			if pconf.attach_mappings then
+				pconf.attach_mappings(prompt_bufnr, map)
+			end
+			for mode, tbl in pairs(pconf.mappings) do
+				for key, action in pairs(tbl) do
+					map(mode, key, action)
+				end
+			end
+			return true
+		end
+	end
+
+	if opts.attach_mappings then
+		local opts_attach = opts.attach_mappings
+		opts.attach_mappings = function(prompt_bufnr, map)
+			defaults.attach_mappings(prompt_bufnr, map)
+			return opts_attach(prompt_bufnr, map)
+		end
+	end
+	return vim.tbl_deep_extend("force", defaults, opts)
+end
+
 local create_worktree = function(opts)
-    opts = opts or {}
+    opts = get_default_opts(opts or {})
     opts.attach_mappings = function()
         actions.select_default:replace(
             function(prompt_bufnr, _)
@@ -142,14 +188,16 @@ local create_worktree = function(opts)
 end
 
 local telescope_git_worktree = function(opts)
-    opts = opts or {}
+    opts = get_default_opts(opts or {})
     local output = utils.get_os_command_output({"git", "worktree", "list"})
     local results = {}
-    local widths = {
-        path = 0,
-        sha = 0,
-        branch = 0
-    }
+
+    local items = vim.F.if_nil(opts.items, {
+        { "branch", 0 },
+        { "path", 0 },
+        { "sha", 0 },
+      })
+    local displayer_items = {}
 
     local parse_line = function(line)
         local fields = vim.split(string.gsub(line, "%s+", " "), " ")
@@ -161,14 +209,17 @@ local telescope_git_worktree = function(opts)
 
         if entry.sha ~= "(bare)" then
             local index = #results + 1
-            for key, val in pairs(widths) do
-                if key == 'path' then
-                    local new_path = utils.transform_path(opts, entry[key])
-                    local path_len = strings.strdisplaywidth(new_path or "")
-                    widths[key] = math.max(val, path_len)
-                else
-                    widths[key] = math.max(val, strings.strdisplaywidth(entry[key] or ""))
+            for key, item in ipairs(items) do
+                if not opts.items then
+                    if item[1] == 'path' then
+                        local new_path = utils.transform_path(opts, entry[item[1]])
+                        local path_len = strings.strdisplaywidth(new_path or "")
+                        item[2] =  math.max(item[2], path_len)
+                    else
+                        item[2] = math.max(item[2], strings.strdisplaywidth(entry[item[1]] or ""))
+                    end
                 end
+                displayer_items[key] = { width = item[2] }
             end
 
             table.insert(results, index, entry)
@@ -180,28 +231,33 @@ local telescope_git_worktree = function(opts)
     end
 
     if #results == 0 then
+        error("No git branches found")
         return
     end
 
     local displayer = require("telescope.pickers.entry_display").create {
         separator = " ",
-        items = {
-            { width = widths.branch },
-            { width = widths.path },
-            { width = widths.sha },
-        },
+        items = displayer_items,
     }
 
     local make_display = function(entry)
-        return displayer {
-            { entry.branch, "TelescopeResultsIdentifier" },
-            { utils.transform_path(opts, entry.path) },
-            { entry.sha },
-        }
+        local foo = {}
+        for _, item in ipairs(items) do
+            if item[1] == "branch" then
+                table.insert(foo, { entry[item[1]], "TelescopeResultsIdentifier" })
+            elseif item[1] == "path" then
+                table.insert(foo, { utils.transform_path(opts, entry[item[1]]) })
+            elseif item[1] == "sha" then
+                table.insert(foo, { entry[item[1]] })
+            else
+                error("Invalid git-worktree entry item: " .. tostring(item[1]))
+            end
+        end
+        return displayer(foo)
     end
 
     pickers.new(opts or {}, {
-        prompt_title = "Git Worktrees",
+        prompt_title = opts.prompt_title or "Git Worktrees",
         finder = finders.new_table {
             results = results,
             entry_maker = function(entry)
@@ -212,23 +268,19 @@ local telescope_git_worktree = function(opts)
             end,
         },
         sorter = conf.generic_sorter(opts),
-        attach_mappings = function(_, map)
-            action_set.select:replace(switch_worktree)
-
-            map("i", "<c-d>", delete_worktree)
-            map("n", "<c-d>", delete_worktree)
-            map("i", "<c-f>", toggle_forced_deletion)
-            map("n", "<c-f>", toggle_forced_deletion)
-
-            return true
-        end
     }):find()
 end
 
-return require("telescope").register_extension(
-           {
-        exports = {
-            git_worktrees = telescope_git_worktree,
-            create_git_worktree = create_worktree
-        }
-    })
+local git_worktree_setup = function(opts)
+  pconf.mappings = vim.tbl_deep_extend("force", pconf.mappings, require("telescope.config").values.mappings)
+  pconf = vim.tbl_deep_extend("force", pconf, opts)
+end
+
+
+return require("telescope").register_extension({
+    setup = git_worktree_setup,
+	exports = {
+		git_worktrees = telescope_git_worktree,
+		create_git_worktree = create_worktree,
+	},
+})
