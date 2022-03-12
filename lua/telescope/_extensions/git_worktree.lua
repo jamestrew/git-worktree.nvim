@@ -12,6 +12,8 @@ local git_worktree = require("git-worktree")
 
 local force_next_deletion = false
 
+local wt_actions = {}
+
 local get_worktree_path = function(prompt_bufnr)
     local selection = action_state.get_selected_entry(prompt_bufnr)
     return selection.path
@@ -25,7 +27,7 @@ local switch_worktree = function(prompt_bufnr)
     end
 end
 
-local toggle_forced_deletion = function()
+wt_actions.toggle_forced_deletion = function()
     -- redraw otherwise the message is not displayed when in insert mode
     if force_next_deletion then
         print('The next deletion will not be forced')
@@ -68,7 +70,7 @@ local confirm_deletion = function(forcing)
     return false
 end
 
-local delete_worktree = function(prompt_bufnr)
+wt_actions.delete_worktree = function(prompt_bufnr)
     if not confirm_deletion() then
         return
     end
@@ -112,12 +114,12 @@ end
 local pconf = {
     mappings = {
         ["i"] = {
-            ["<C-d>"] = delete_worktree,
-            ["<C-f>"] = toggle_forced_deletion,
+            ["<C-d>"] = wt_actions.delete_worktree,
+            ["<C-f>"] = wt_actions.toggle_forced_deletion,
         },
         ["n"] = {
-            ["<C-d>"] = delete_worktree,
-            ["<C-f>"] = toggle_forced_deletion,
+            ["<C-d>"] = wt_actions.delete_worktree,
+            ["<C-f>"] = wt_actions.toggle_forced_deletion,
         },
     },
 }
@@ -282,5 +284,6 @@ return require("telescope").register_extension({
 	exports = {
 		git_worktrees = telescope_git_worktree,
 		create_git_worktree = create_worktree,
+        actions = wt_actions
 	},
 })
