@@ -1,5 +1,4 @@
 local Path = require("plenary.path")
-local Window = require("plenary.window.float")
 local strings = require("plenary.strings")
 local pickers = require("telescope.pickers")
 local finders = require("telescope.finders")
@@ -111,6 +110,7 @@ local create_input_prompt = function(cb)
 end
 
 local pconf = {
+    ordinal_key = "branch",
 	mappings = {
 		["i"] = {
 			["<C-d>"] = wt_actions.delete_worktree,
@@ -243,19 +243,20 @@ local telescope_git_worktree = function(opts)
 	})
 
 	local make_display = function(entry)
-		local foo = {}
+		local column = {}
 		for _, item in ipairs(items) do
-			if item[1] == "branch" then
-				table.insert(foo, { entry[item[1]], "TelescopeResultsIdentifier" })
-			elseif item[1] == "path" then
-				table.insert(foo, { utils.transform_path(opts, entry[item[1]]) })
-			elseif item[1] == "sha" then
-				table.insert(foo, { entry[item[1]] })
-			else
-				error("Invalid git-worktree entry item: " .. tostring(item[1]))
-			end
+            local col_name = item[1]
+			local col_entry = { entry[col_name] }
+
+            if col_name == opts.ordinal_key then
+                table.insert(col_entry, "TelescopeResultsIdentifier")
+            end
+            if col_name == "path" then
+                col_entry[1] = Path:new(entry[col_name]):normalize(git_worktree.get_root())
+            end
+			table.insert(column, col_entry)
 		end
-		return displayer(foo)
+		return displayer(column)
 	end
 
 	pickers.new(opts or {}, {
@@ -264,7 +265,7 @@ local telescope_git_worktree = function(opts)
 			results = results,
 			entry_maker = function(entry)
 				entry.value = entry.branch
-				entry.ordinal = entry.branch
+				entry.ordinal = entry[opts.ordinal_key]
 				entry.display = make_display
 				return entry
 			end,
