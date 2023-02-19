@@ -110,7 +110,7 @@ local create_input_prompt = function(cb)
 end
 
 local pconf = {
-    ordinal_key = "branch",
+	ordinal_key = "branch",
 	mappings = {
 		["i"] = {
 			["<C-d>"] = wt_actions.delete_worktree,
@@ -245,33 +245,35 @@ local telescope_git_worktree = function(opts)
 	local make_display = function(entry)
 		local column = {}
 		for _, item in ipairs(items) do
-            local col_name = item[1]
+			local col_name = item[1]
 			local col_entry = { entry[col_name] }
 
-            if col_name == opts.ordinal_key then
-                table.insert(col_entry, "TelescopeResultsIdentifier")
-            end
-            if col_name == "path" then
-                col_entry[1] = Path:new(entry[col_name]):normalize(git_worktree.get_root())
-            end
+			if col_name == opts.ordinal_key then
+				table.insert(col_entry, "TelescopeResultsIdentifier")
+			end
+			if col_name == "path" then
+				col_entry[1] = Path:new(entry[col_name]):normalize(git_worktree.get_root())
+			end
 			table.insert(column, col_entry)
 		end
 		return displayer(column)
 	end
 
-	pickers.new(opts or {}, {
-		prompt_title = opts.prompt_title or "Git Worktrees",
-		finder = finders.new_table({
-			results = results,
-			entry_maker = function(entry)
-				entry.value = entry.branch
-				entry.ordinal = entry[opts.ordinal_key]
-				entry.display = make_display
-				return entry
-			end,
-		}),
-		sorter = conf.generic_sorter(opts),
-	}):find()
+	pickers
+		.new(opts or {}, {
+			prompt_title = opts.prompt_title or "Git Worktrees",
+			finder = finders.new_table({
+				results = results,
+				entry_maker = function(entry)
+					entry.value = entry.branch
+					entry.ordinal = entry[opts.ordinal_key]
+					entry.display = make_display
+					return entry
+				end,
+			}),
+			sorter = conf.generic_sorter(opts),
+		})
+		:find()
 end
 
 local git_worktree_setup = function(opts)
